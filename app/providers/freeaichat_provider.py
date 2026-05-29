@@ -248,53 +248,80 @@ class FreeaichatProvider(BaseProvider):
             ) as response:
                 response.raise_for_status()
                 
-                buffer = ""
                 parsed_content = False
                 debug_samples = []
+                event_type = "message"
+                data_lines = []
+
+                def parse_event(current_event_type: str, current_data_lines: List[str]) -> Optional[Tuple[str, str]]:
+                    data_str = "".join(current_data_lines)
+                    if not data_str:
+                        return None
+
+                    if len(debug_samples) < 5:
+                        debug_samples.append(f"{current_event_type}: {data_str[:300]}")
+
+                    if current_event_type == "openai_response_id":
+                        try:
+                            data_json = json.loads(data_str)
+                            new_id = data_json.get("id")
+                            if new_id:
+                                return "response_id", new_id
+                        except json.JSONDecodeError:
+                            logger.warning(f"无法解析 openai_response_id 数据: {data_str}")
+                        return None
+
+                    if data_str == "[DONE]":
+                        return None
+
+                    try:
+                        data_json = json.loads(data_str)
+                        delta_content = extract_content_delta(data_json)
+                        if delta_content:
+                            return "content", fix_encoding(delta_content)
+                    except json.JSONDecodeError:
+                        return "content", fix_encoding(data_str)
+
+                    return None
+
                 async for line in response.aiter_lines():
                     if isinstance(line, bytes):
                         line = line.decode("utf-8", errors="replace")
-                    buffer += line + "\n"
-                    if buffer.endswith("\n\n"):
-                        events = buffer.strip().split("\n\n")
-                        for event_str in events:
-                            if not event_str: continue
-                            
-                            event_lines = event_str.split("\n")
-                            event_type = "message"
-                            data_lines = []
+                    line = line.rstrip("\r")
 
-                            for eline in event_lines:
-                                if eline.startswith("event:"):
-                                    event_type = eline[len("event:"):].strip()
-                                elif eline.startswith("data:"):
-                                    data_lines.append(eline[len("data:"):].strip())
-                            
-                            data_str = "".join(data_lines)
-                            if data_str and len(debug_samples) < 5:
-                                debug_samples.append(f"{event_type}: {data_str[:300]}")
+                    if line == "":
+                        parsed_event = parse_event(event_type, data_lines)
+                        if parsed_event:
+                            chunk_type, chunk_data = parsed_event
+                            if chunk_type == "content":
+                                parsed_content = True
+                            yield chunk_type, chunk_data
+                        event_type = "message"
+                        data_lines = []
+                        continue
 
-                            if event_type == "openai_response_id":
-                                try:
-                                    data_json = json.loads(data_str)
-                                    new_id = data_json.get("id")
-                                    if new_id:
-                                        yield "response_id", new_id
-                                except json.JSONDecodeError:
-                                    logger.warning(f"无法解析 openai_response_id 数据: {data_str}")
-                            elif data_str:
-                                if data_str == "[DONE]":
-                                    continue
-                                try:
-                                    data_json = json.loads(data_str)
-                                    delta_content = extract_content_delta(data_json)
-                                    if delta_content:
-                                        parsed_content = True
-                                        yield "content", fix_encoding(delta_content)
-                                except json.JSONDecodeError:
-                                    parsed_content = True
-                                    yield "content", fix_encoding(data_str)
-                        buffer = ""
+                    if line.startswith(":"):
+                        continue
+
+                    if line.startswith("event:"):
+                        event_type = line[len("event:"):].strip()
+                    elif line.startswith("data:"):
+                        data_lines.append(line[len("data:"):].strip())
+                    elif "\t" in line:
+                        # Browser devtools displays SSE rows as: event<TAB>data.
+                        possible_event_type, possible_data = line.split("\t", 1)
+                        if possible_event_type and possible_data:
+                            event_type = possible_event_type.strip()
+                            data_lines.append(possible_data.strip())
+                    else:
+                        data_lines.append(line.strip())
+
+                parsed_event = parse_event(event_type, data_lines)
+                if parsed_event:
+                    chunk_type, chunk_data = parsed_event
+                    if chunk_type == "content":
+                        parsed_content = True
+                    yield chunk_type, chunk_data
 
                 if not parsed_content and debug_samples:
                     logger.warning("上游 SSE 未解析到文本，事件样本: %s", " | ".join(debug_samples))
