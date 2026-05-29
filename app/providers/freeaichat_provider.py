@@ -36,6 +36,51 @@ def fix_encoding(text: str) -> str:
     except (UnicodeEncodeError, UnicodeDecodeError):
         return text
 
+def extract_content_delta(data: Any) -> str:
+    if isinstance(data, str):
+        return data
+
+    if isinstance(data, list):
+        return "".join(extract_content_delta(item) for item in data)
+
+    if not isinstance(data, dict):
+        return ""
+
+    delta = data.get("delta")
+    if isinstance(delta, str):
+        return delta
+    if isinstance(delta, dict):
+        content = extract_content_delta(delta.get("content"))
+        if content:
+            return content
+
+    content = extract_content_delta(data.get("content"))
+    if content:
+        return content
+
+    message = data.get("message")
+    if isinstance(message, dict):
+        content = extract_content_delta(message.get("content"))
+        if content:
+            return content
+
+    choices = data.get("choices")
+    if isinstance(choices, list):
+        chunks = []
+        for choice in choices:
+            if not isinstance(choice, dict):
+                continue
+            chunks.append(extract_content_delta(choice.get("delta")))
+            chunks.append(extract_content_delta(choice.get("message")))
+            chunks.append(extract_content_delta(choice.get("text")))
+        return "".join(chunks)
+
+    text = data.get("text")
+    if isinstance(text, str):
+        return text
+
+    return ""
+
 class FreeaichatProvider(BaseProvider):
     """
     FreeAIchat.ai 服务提供商 (v1.7)
@@ -105,8 +150,10 @@ class FreeaichatProvider(BaseProvider):
                     final_chunk = {"id": chat_id, "object": "chat.completion.chunk", "created": int(time.time()), "model": model_name, "choices": [{"index": 0, "delta": {}, "finish_reason": "stop"}]}
                     yield f"data: {json.dumps(final_chunk, ensure_ascii=False)}\n\n"
                     yield "data: [DONE]\n\n"
-                    logger.info("流式响应结束。")
+                    logger.info(f"流式响应结束，累计输出字符数: {len(full_content)}。")
                 else:
+                    if not full_content:
+                        logger.warning("非流式响应结束，但未解析到任何上游内容。")
                     yield full_content
 
             if is_stream:
@@ -227,8 +274,8 @@ class FreeaichatProvider(BaseProvider):
                                 try:
                                     if data_str == "[DONE]": continue
                                     data_json = json.loads(data_str)
-                                    delta_content = data_json.get("delta")
-                                    if isinstance(delta_content, str):
+                                    delta_content = extract_content_delta(data_json)
+                                    if delta_content:
                                         yield "content", fix_encoding(delta_content)
                                 except json.JSONDecodeError:
                                     logger.warning(f"无法解析 SSE 数据块: {data_str}")
