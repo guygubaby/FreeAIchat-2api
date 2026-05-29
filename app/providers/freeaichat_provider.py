@@ -1,4 +1,3 @@
-import httpx
 import json
 import uuid
 import time
@@ -6,6 +5,7 @@ import traceback
 import asyncio
 from typing import Dict, Any, AsyncGenerator, Union, List, Tuple, Optional
 
+from curl_cffi.requests import AsyncSession as CurlAsyncSession
 from fastapi import Request, HTTPException
 from fastapi.responses import StreamingResponse, JSONResponse
 
@@ -135,8 +135,8 @@ class FreeaichatProvider(BaseProvider):
             'bot_id': bot_id,
             'user_client_message_id': f'aipkit-client-msg-{bot_id}-{int(time.time() * 1000)}-{uuid.uuid4().hex[:5]}'
         }
-        async with httpx.AsyncClient() as client:
-            response = await client.post(url, headers=headers, data=form_data)
+        async with CurlAsyncSession(impersonate="chrome") as client:
+            response = await client.post(url, headers=headers, data=form_data, timeout=30)
             response.raise_for_status()
             response_json = response.json()
             if response_json.get("success") and response_json.get("data", {}).get("cache_key"):
@@ -166,12 +166,14 @@ class FreeaichatProvider(BaseProvider):
         
         headers = self._prepare_headers(is_stream=True)
 
-        async with httpx.AsyncClient(timeout=180) as client:
+        async with CurlAsyncSession(impersonate="chrome") as client:
             async with client.stream("GET", url, headers=headers, params=params) as response:
                 response.raise_for_status()
                 
                 buffer = ""
                 async for line in response.aiter_lines():
+                    if isinstance(line, bytes):
+                        line = line.decode("utf-8", errors="replace")
                     buffer += line + "\n"
                     if buffer.endswith("\n\n"):
                         events = buffer.strip().split("\n\n")
