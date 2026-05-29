@@ -1,6 +1,6 @@
 services:
   nginx:
-    image: nginx:latest
+    image: docker.guygubaby.top/nginx:stable-alpine
     container_name: freeaichat-2api-nginx
     restart: always
     ports:
