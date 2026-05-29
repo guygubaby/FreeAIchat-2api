@@ -18,6 +18,11 @@ logger = logging.getLogger(__name__)
 # 全局会话上下文存储容器
 CONVERSATION_CONTEXT: Dict[str, Dict[str, Any]] = {}
 
+def upstream_proxy_kwargs() -> Dict[str, str]:
+    if settings.UPSTREAM_PROXY_URL:
+        return {"proxy": settings.UPSTREAM_PROXY_URL}
+    return {}
+
 def fix_encoding(text: str) -> str:
     """修复上游服务可能存在的双重编码或错误编码问题。"""
     try:
@@ -136,7 +141,13 @@ class FreeaichatProvider(BaseProvider):
             'user_client_message_id': f'aipkit-client-msg-{bot_id}-{int(time.time() * 1000)}-{uuid.uuid4().hex[:5]}'
         }
         async with CurlAsyncSession(impersonate="chrome") as client:
-            response = await client.post(url, headers=headers, data=form_data, timeout=30)
+            response = await client.post(
+                url,
+                headers=headers,
+                data=form_data,
+                timeout=30,
+                **upstream_proxy_kwargs(),
+            )
             response.raise_for_status()
             response_json = response.json()
             if response_json.get("success") and response_json.get("data", {}).get("cache_key"):
@@ -167,7 +178,13 @@ class FreeaichatProvider(BaseProvider):
         headers = self._prepare_headers(is_stream=True)
 
         async with CurlAsyncSession(impersonate="chrome") as client:
-            async with client.stream("GET", url, headers=headers, params=params) as response:
+            async with client.stream(
+                "GET",
+                url,
+                headers=headers,
+                params=params,
+                **upstream_proxy_kwargs(),
+            ) as response:
                 response.raise_for_status()
                 
                 buffer = ""
