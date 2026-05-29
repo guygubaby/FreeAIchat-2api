@@ -22,12 +22,10 @@ class Settings(BaseSettings):
 
     # --- 上游请求代理 (可选) ---
     UPSTREAM_PROXY: Optional[str] = None
-    HTTPS_PROXY: Optional[str] = None
-    HTTP_PROXY: Optional[str] = None
 
     @property
     def UPSTREAM_PROXY_URL(self) -> Optional[str]:
-        return self.UPSTREAM_PROXY or self.HTTPS_PROXY or self.HTTP_PROXY
+        return self.UPSTREAM_PROXY
 
     # --- 模型名称到 bot_id 的映射表 (根据您的最终情报精确更新) ---
     MODEL_MAP: Dict[str, str] = {

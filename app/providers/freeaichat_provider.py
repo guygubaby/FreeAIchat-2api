@@ -17,9 +17,14 @@ logger = logging.getLogger(__name__)
 
 # 全局会话上下文存储容器
 CONVERSATION_CONTEXT: Dict[str, Dict[str, Any]] = {}
+_logged_proxy = False
 
 def upstream_proxy_kwargs() -> Dict[str, str]:
+    global _logged_proxy
     if settings.UPSTREAM_PROXY_URL:
+        if not _logged_proxy:
+            logger.info("上游请求代理已启用。")
+            _logged_proxy = True
         return {"proxy": settings.UPSTREAM_PROXY_URL}
     return {}
 
