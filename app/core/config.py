@@ -1,3 +1,6 @@
+import base64
+import binascii
+
 from pydantic_settings import BaseSettings
 from typing import List, Optional, Dict
 
@@ -15,10 +18,22 @@ class Settings(BaseSettings):
     API_MASTER_KEY: Optional[str] = None
 
     # --- FreeAIchat API 核心凭证 (全部从 .env 加载) ---
-    COOKIE: str
+    COOKIE: Optional[str] = None
+    COOKIE_B64: Optional[str] = None
     AJAX_NONCE: str
     SESSION_ID: str
     POST_ID: str
+
+    @property
+    def COOKIE_VALUE(self) -> str:
+        if self.COOKIE_B64:
+            try:
+                return base64.b64decode(self.COOKIE_B64).decode("utf-8")
+            except (binascii.Error, UnicodeDecodeError) as exc:
+                raise ValueError("COOKIE_B64 不是有效的 UTF-8 Base64 字符串。") from exc
+        if self.COOKIE:
+            return self.COOKIE
+        raise ValueError("请在 .env 中配置 COOKIE_B64 或 COOKIE。")
 
     # --- 上游请求代理 (可选) ---
     UPSTREAM_PROXY: Optional[str] = None

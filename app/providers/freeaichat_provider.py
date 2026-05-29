@@ -235,14 +235,13 @@ class FreeaichatProvider(BaseProvider):
                         buffer = ""
 
     def _prepare_headers(self, is_stream: bool = False) -> Dict[str, str]:
-        if not settings.COOKIE:
-            raise ValueError("COOKIE 未在 .env 文件中配置。")
+        cookie = settings.COOKIE_VALUE
         
         headers = {
             "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/141.0.0.0 Safari/537.36",
             "Referer": "https://chatgptfree.ai/",
             "Origin": "https://chatgptfree.ai",
-            "Cookie": settings.COOKIE
+            "Cookie": cookie
         }
         if is_stream:
             headers.update({"Accept": "text/event-stream", "Cache-Control": "no-cache"})
