@@ -19,13 +19,14 @@ logger = logging.getLogger(__name__)
 CONVERSATION_CONTEXT: Dict[str, Dict[str, Any]] = {}
 _logged_proxy = False
 
-def upstream_proxy_kwargs() -> Dict[str, str]:
+def upstream_proxy_kwargs() -> Dict[str, Dict[str, str]]:
     global _logged_proxy
-    if settings.UPSTREAM_PROXY_URL:
+    proxy_url = settings.UPSTREAM_PROXY_URL.strip() if settings.UPSTREAM_PROXY_URL else ""
+    if proxy_url:
         if not _logged_proxy:
             logger.info("上游请求代理已启用。")
             _logged_proxy = True
-        return {"proxy": settings.UPSTREAM_PROXY_URL}
+        return {"proxies": {"http": proxy_url, "https": proxy_url}}
     return {}
 
 def fix_encoding(text: str) -> str:
