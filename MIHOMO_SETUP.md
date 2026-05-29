@@ -78,52 +78,40 @@ curl -x http://127.0.0.1:7890 https://api.ipify.org
 
 ## Select Proxy Node
 
-List proxy groups and nodes:
+Use the helper script in this repository:
 
 ```bash
-python3 - <<'PY'
-import json, urllib.request
-
-data = json.load(urllib.request.urlopen("http://127.0.0.1:9090/proxies"))
-g = data["proxies"]["GLOBAL"]
-
-print("CURRENT:", g.get("now"))
-for i, name in enumerate(g["all"], 1):
-    print(f"{i}. {name}")
-PY
+cd /root/devops/FreeAIchat-2api
+python3 scripts/switch_mihomo_node.py --list
 ```
 
-Switch `GLOBAL` to a specific node:
+Switch by full node name:
 
 ```bash
-python3 - <<'PY'
-import json, urllib.parse, urllib.request
-
-group = "GLOBAL"
-node = "YOUR_NODE_NAME"
-
-url = "http://127.0.0.1:9090/proxies/" + urllib.parse.quote(group)
-req = urllib.request.Request(
-    url,
-    data=json.dumps({"name": node}).encode(),
-    method="PUT",
-    headers={"Content-Type": "application/json"},
-)
-
-resp = urllib.request.urlopen(req)
-print("HTTP", resp.status)
-print("SELECTED:", node)
-PY
+python3 scripts/switch_mihomo_node.py '🇭🇰 香港Z03 | IEPL'
 ```
 
-Verify:
+Switch by partial node name if it matches exactly one node:
 
 ```bash
-python3 - <<'PY'
-import json, urllib.request
-data = json.load(urllib.request.urlopen("http://127.0.0.1:9090/proxies/GLOBAL"))
-print("CURRENT:", data.get("now"))
-PY
+python3 scripts/switch_mihomo_node.py '香港Z03'
+```
+
+Switch by 1-based index from the list output:
+
+```bash
+python3 scripts/switch_mihomo_node.py 7
+```
+
+Use a different proxy group if needed:
+
+```bash
+python3 scripts/switch_mihomo_node.py --group '🔰 选择节点' '香港Z03'
+```
+
+Verify the exit IP:
+
+```bash
 curl -x http://127.0.0.1:7890 https://api.ipify.org
 ```
 
