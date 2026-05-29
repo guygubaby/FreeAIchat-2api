@@ -18,6 +18,8 @@ services:
       dockerfile: Dockerfile
     container_name: freeaichat-2api-app
     restart: unless-stopped
+    extra_hosts:
+      - "host.docker.internal:host-gateway"
     env_file:
       - .env
     networks:
