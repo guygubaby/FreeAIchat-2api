@@ -46,6 +46,9 @@ def extract_content_delta(data: Any) -> str:
     if not isinstance(data, dict):
         return ""
 
+    if isinstance(data.get("type"), str) and isinstance(data.get("text"), str):
+        return data["text"]
+
     delta = data.get("delta")
     if isinstance(delta, str):
         return delta
@@ -61,6 +64,11 @@ def extract_content_delta(data: Any) -> str:
     message = data.get("message")
     if isinstance(message, dict):
         content = extract_content_delta(message.get("content"))
+        if content:
+            return content
+
+    for key in ("data", "response", "output", "output_text", "answer", "result"):
+        content = extract_content_delta(data.get(key))
         if content:
             return content
 
@@ -241,6 +249,8 @@ class FreeaichatProvider(BaseProvider):
                 response.raise_for_status()
                 
                 buffer = ""
+                parsed_content = False
+                debug_samples = []
                 async for line in response.aiter_lines():
                     if isinstance(line, bytes):
                         line = line.decode("utf-8", errors="replace")
@@ -261,6 +271,8 @@ class FreeaichatProvider(BaseProvider):
                                     data_lines.append(eline[len("data:"):].strip())
                             
                             data_str = "".join(data_lines)
+                            if data_str and len(debug_samples) < 5:
+                                debug_samples.append(f"{event_type}: {data_str[:300]}")
 
                             if event_type == "openai_response_id":
                                 try:
@@ -271,15 +283,21 @@ class FreeaichatProvider(BaseProvider):
                                 except json.JSONDecodeError:
                                     logger.warning(f"无法解析 openai_response_id 数据: {data_str}")
                             elif data_str:
+                                if data_str == "[DONE]":
+                                    continue
                                 try:
-                                    if data_str == "[DONE]": continue
                                     data_json = json.loads(data_str)
                                     delta_content = extract_content_delta(data_json)
                                     if delta_content:
+                                        parsed_content = True
                                         yield "content", fix_encoding(delta_content)
                                 except json.JSONDecodeError:
-                                    logger.warning(f"无法解析 SSE 数据块: {data_str}")
+                                    parsed_content = True
+                                    yield "content", fix_encoding(data_str)
                         buffer = ""
+
+                if not parsed_content and debug_samples:
+                    logger.warning("上游 SSE 未解析到文本，事件样本: %s", " | ".join(debug_samples))
 
     def _prepare_headers(self, is_stream: bool = False) -> Dict[str, str]:
         cookie = settings.COOKIE_VALUE
